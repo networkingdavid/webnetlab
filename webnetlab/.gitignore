@@ -1,0 +1,57 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+webnetlab/frontend/node_modules/
+webnetlab/frontend/dist/
+webnetlab/frontend/.vite/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+webnetlab/.env
+!webnetlab/.env.example
+.env
+!.env.example
+
+# ── MIBs (user-uploaded, not committed) ──────────────────────────────────────
+webnetlab/mibs/*.mib
+webnetlab/mibs/*.txt
+!webnetlab/mibs/.gitkeep
+
+# ── Docker volumes / data ────────────────────────────────────────────────────
+webnetlab/postgres_data/
+*.db
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V500
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Test / coverage ───────────────────────────────────────────────────────────
+.coverage
+htmlcov/
+coverage.xml

@@ -1,0 +1,88 @@
+version: "3.9"
+
+networks:
+  webnetlab-internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: webnetlab
+      POSTGRES_USER: webnetlab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webnetlab}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - webnetlab-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webnetlab -d webnetlab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - webnetlab-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://webnetlab:${POSTGRES_PASSWORD:-webnetlab}@db:5432/webnetlab
+      REDIS_URL: redis://redis:6379/0
+      # Inject the real host OS so the backend can report correct platform info.
+      # Set HOST_PLATFORM=Darwin on macOS or HOST_PLATFORM=Linux on Linux before running.
+      HOST_PLATFORM: ${HOST_PLATFORM:-Linux}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mibs:/app/mibs
+      - ./seeds:/app/seeds
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - webnetlab-internal
+
+  agent-builder:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    image: webnetlab-agent:latest
+    command: ["echo", "Agent image built"]
+    profiles:
+      - build-only
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    networks:
+      - webnetlab-internal

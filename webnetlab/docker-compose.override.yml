@@ -1,0 +1,23 @@
+# docker-compose.override.yml — development hot-reload mounts
+# Applied automatically when running `docker compose up`
+
+version: "3.9"
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app          # Live code mount — changes reload instantly
+      - ./mibs:/app/mibs
+      - ./seeds:/app/seeds
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app/app
+
+  frontend:
+    volumes:
+      - ./frontend:/app         # Live code mount for Vite HMR
+      - /app/node_modules       # Preserve container node_modules
