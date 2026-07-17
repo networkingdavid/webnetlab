@@ -23,6 +23,78 @@ const OID_MODULE_NAMES: Record<string, string> = {
   '1.3.6.1.4.1': 'Enterprises',
 };
 
+// ─── OID → human name lookup (common IETF / Cisco OIDs) ─────────────────────
+
+const OID_NAMES: Record<string, string> = {
+  // SNMPv2-MIB / RFC1213-MIB System group
+  '1.3.6.1.2.1.1.1.0':  'sysDescr',
+  '1.3.6.1.2.1.1.2.0':  'sysObjectID',
+  '1.3.6.1.2.1.1.3.0':  'sysUpTime',
+  '1.3.6.1.2.1.1.4.0':  'sysContact',
+  '1.3.6.1.2.1.1.5.0':  'sysName',
+  '1.3.6.1.2.1.1.6.0':  'sysLocation',
+  '1.3.6.1.2.1.1.7.0':  'sysServices',
+  // IF-MIB
+  '1.3.6.1.2.1.2.1.0':  'ifNumber',
+  '1.3.6.1.2.1.2.2.1.1': 'ifIndex',
+  '1.3.6.1.2.1.2.2.1.2': 'ifDescr',
+  '1.3.6.1.2.1.2.2.1.3': 'ifType',
+  '1.3.6.1.2.1.2.2.1.4': 'ifMtu',
+  '1.3.6.1.2.1.2.2.1.5': 'ifSpeed',
+  '1.3.6.1.2.1.2.2.1.6': 'ifPhysAddress',
+  '1.3.6.1.2.1.2.2.1.7': 'ifAdminStatus',
+  '1.3.6.1.2.1.2.2.1.8': 'ifOperStatus',
+  '1.3.6.1.2.1.2.2.1.10': 'ifInOctets',
+  '1.3.6.1.2.1.2.2.1.11': 'ifInUcastPkts',
+  '1.3.6.1.2.1.2.2.1.13': 'ifInDiscards',
+  '1.3.6.1.2.1.2.2.1.14': 'ifInErrors',
+  '1.3.6.1.2.1.2.2.1.16': 'ifOutOctets',
+  '1.3.6.1.2.1.2.2.1.17': 'ifOutUcastPkts',
+  '1.3.6.1.2.1.2.2.1.19': 'ifOutDiscards',
+  '1.3.6.1.2.1.2.2.1.20': 'ifOutErrors',
+  // IP-MIB
+  '1.3.6.1.2.1.4.1.0':  'ipForwarding',
+  '1.3.6.1.2.1.4.2.0':  'ipDefaultTTL',
+  '1.3.6.1.2.1.4.3.0':  'ipInReceives',
+  // TCP-MIB
+  '1.3.6.1.2.1.6.1.0':  'tcpRtoAlgorithm',
+  '1.3.6.1.2.1.6.9.0':  'tcpCurrEstab',
+  // SNMPv2-MIB
+  '1.3.6.1.2.1.11.1.0': 'snmpInPkts',
+  '1.3.6.1.2.1.11.2.0': 'snmpOutPkts',
+  '1.3.6.1.2.1.11.30.0':'snmpEnableAuthenTraps',
+  // IF-MIB ifXTable
+  '1.3.6.1.2.1.31.1.1.1.1':  'ifName',
+  '1.3.6.1.2.1.31.1.1.1.2':  'ifInMulticastPkts',
+  '1.3.6.1.2.1.31.1.1.1.6':  'ifHCInOctets',
+  '1.3.6.1.2.1.31.1.1.1.10': 'ifHCOutOctets',
+  '1.3.6.1.2.1.31.1.1.1.15': 'ifHighSpeed',
+  '1.3.6.1.2.1.31.1.1.1.18': 'ifAlias',
+  // ENTITY-MIB
+  '1.3.6.1.2.1.47.1.1.1.1.2': 'entPhysicalDescr',
+  '1.3.6.1.2.1.47.1.1.1.1.7': 'entPhysicalName',
+  // Cisco CISCO-PRODUCTS-MIB / CISCO-ENVMON-MIB
+  '1.3.6.1.4.1.9.2.1.1.0':   'ciscoSysDescr',
+  '1.3.6.1.4.1.9.2.1.3.0':   'ciscoLocalIfDescr',
+  '1.3.6.1.4.1.9.9.13.1.3.1.3': 'ciscoEnvMonTemperatureStatusValue',
+  '1.3.6.1.4.1.9.9.68.1.2.2.1.2': 'vmVlanType',
+};
+
+/** Return the human-readable name for an OID, or a short numeric suffix. */
+function oidName(oid: string): string {
+  // Exact match (scalar .0 OIDs)
+  if (OID_NAMES[oid]) return OID_NAMES[oid];
+  // Strip last segment and try as table column prefix (e.g. 1.3.6.1.2.1.2.2.1.2.X)
+  const parts = oid.split('.');
+  // Try stripping the last 1 or 2 parts (instance index)
+  for (let trim = 1; trim <= 2; trim++) {
+    const prefix = parts.slice(0, parts.length - trim).join('.');
+    if (OID_NAMES[prefix]) return OID_NAMES[prefix];
+  }
+  // Fallback: last 3 numeric segments as short label
+  return parts.slice(-3).join('.');
+}
+
 function getModule(oid: string): string {
   for (const prefix of Object.keys(OID_MODULE_NAMES).sort((a, b) => b.length - a.length)) {
     if (oid.startsWith(prefix)) return OID_MODULE_NAMES[prefix];
@@ -181,6 +253,7 @@ function OidRow({ deviceId, oid, editing, onToggle }: {
   onToggle: () => void;
 }) {
   const preview = oid.static_value ?? oid.walk_seed_value ?? (oid.random_config ? `rnd(${oid.random_config.min}–${oid.random_config.max})` : null);
+  const name = oidName(oid.oid);
 
   return (
     <>
@@ -189,7 +262,7 @@ function OidRow({ deviceId, oid, editing, onToggle }: {
         onClick={onToggle}
       >
         <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{oid.oid}</td>
-        <td style={{ color: 'var(--muted)', fontSize: 12 }}>—</td>
+        <td style={{ fontSize: 12, fontWeight: 500, color: name.includes('.') ? 'var(--muted)' : 'var(--text)' }}>{name}</td>
         <td><ModeBadge mode={oid.value_mode} /></td>
         <td style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--muted)' }}>
           {preview ?? '—'}

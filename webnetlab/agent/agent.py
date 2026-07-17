@@ -35,6 +35,8 @@ import logging
 import os
 import sys
 
+import redis as _redis_sync
+
 from pyasn1.codec.ber import decoder, encoder
 from pyasn1.type.univ import OctetString, Integer, ObjectIdentifier
 from pysnmp.proto.rfc1902 import Counter32, Gauge32, TimeTicks, IpAddress
@@ -226,9 +228,11 @@ def _cb_fun_inner(transport_dispatcher, transport_domain, transport_address, who
         # ----------------------------------------------------------------
         if req_pdu_type in ("GetRequestPDU", "GetNextRequestPDU"):
             _handle_get(p_mod, req_pdu, rsp_pdu, getnext=(req_pdu_type == "GetNextRequestPDU"))
+            _increment_query_counter()
 
         elif req_pdu_type == "GetBulkRequestPDU":
             _handle_getbulk(p_mod, req_pdu, rsp_pdu)
+            _increment_query_counter()
 
         else:
             log.debug("Unsupported PDU type '%s'; discarding.", req_pdu_type)
@@ -371,6 +375,36 @@ def _handle_getbulk(p_mod, req_pdu, rsp_pdu) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Redis query counter (sync client — asyncore is single-threaded)
+# ---------------------------------------------------------------------------
+
+_redis_client: "_redis_sync.Redis | None" = None
+_QUERY_COUNTER_KEY = f"device:{DEVICE_ID}:snmp_queries"
+
+
+def _init_redis_counter() -> None:
+    """Create a sync Redis client for incrementing the query counter."""
+    global _redis_client
+    try:
+        _redis_client = _redis_sync.from_url(REDIS_URL, decode_responses=True)
+        _redis_client.ping()
+        log.info("Redis counter ready — key=%s", _QUERY_COUNTER_KEY)
+    except Exception as exc:
+        log.warning("Redis counter unavailable: %s — queries will not be tracked", exc)
+        _redis_client = None
+
+
+def _increment_query_counter() -> None:
+    """Non-fatal INCR on the device query counter key."""
+    if _redis_client is None:
+        return
+    try:
+        _redis_client.incr(_QUERY_COUNTER_KEY)
+    except Exception:
+        pass  # never crash the SNMP handler
+
+
 def main() -> None:
     global _store
 
@@ -380,6 +414,7 @@ def main() -> None:
     )
 
     _store = MibStore(redis_url=REDIS_URL, device_id=DEVICE_ID)
+    _init_redis_counter()
 
     dispatcher = AsyncoreDispatcher()
     dispatcher.registerRecvCbFun(_cb_fun)
