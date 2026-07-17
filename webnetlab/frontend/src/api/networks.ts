@@ -21,6 +21,10 @@ export interface CreateNetworkData {
 
 export interface HostInterface {
   name: string;
+  mac: string;
+  state: 'up' | 'down' | 'unknown';
+  speed_mbps: number;   // 0 = unknown
+  ip: string;           // primary IPv4, '' if unknown
   rx_bytes: number;
   tx_bytes: number;
 }

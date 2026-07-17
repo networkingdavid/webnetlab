@@ -163,27 +163,103 @@ function NewNetworkModal({ open, onClose, isLinux }: {
         {isLanMode && isLinux && (
           <div className="form-group">
             <label className="form-label">Parent Interface *</label>
+
             {hostIfaces.length > 0 ? (
-              <select
-                className="form-select"
-                value={form.host_interface ?? ''}
-                onChange={e => setForm(f => ({ ...f, host_interface: e.target.value }))}
-              >
-                <option value="">— select NIC —</option>
-                {hostIfaces.map(iface => (
-                  <option key={iface.name} value={iface.name}>{iface.name}</option>
-                ))}
-              </select>
+              <>
+                {/* Rich NIC selection table */}
+                <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
+                  {/* header row */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '110px 1fr 70px 80px',
+                    padding: '5px 10px', background: 'var(--surface)',
+                    fontSize: 11, fontWeight: 600, color: 'var(--muted)',
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                    <span>Interface</span><span>IP / MAC</span><span>State</span><span>Speed</span>
+                  </div>
+                  {hostIfaces.map(iface => {
+                    const selected = form.host_interface === iface.name;
+                    const isUp = iface.state === 'up';
+                    return (
+                      <div
+                        key={iface.name}
+                        onClick={() => setForm(f => ({ ...f, host_interface: iface.name }))}
+                        style={{
+                          display: 'grid', gridTemplateColumns: '110px 1fr 70px 80px',
+                          padding: '7px 10px', cursor: 'pointer',
+                          background: selected ? '#eff6ff' : 'var(--bg)',
+                          borderLeft: selected ? '3px solid var(--accent, #2563eb)' : '3px solid transparent',
+                          borderBottom: '1px solid var(--border)',
+                          transition: 'background 0.1s',
+                        }}
+                      >
+                        {/* Interface name */}
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: selected ? 'var(--accent, #2563eb)' : 'var(--text)' }}>
+                          {iface.name}
+                        </span>
+
+                        {/* IP / MAC */}
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                          {iface.ip ? (
+                            <span style={{ fontFamily: 'monospace', color: 'var(--text)', marginRight: 6 }}>{iface.ip}</span>
+                          ) : null}
+                          {iface.mac ? (
+                            <span style={{ fontFamily: 'monospace', opacity: 0.6 }}>{iface.mac}</span>
+                          ) : '—'}
+                        </span>
+
+                        {/* State badge */}
+                        <span>
+                          <span style={{
+                            display: 'inline-block', fontSize: 10, fontWeight: 700,
+                            padding: '1px 6px', borderRadius: 10,
+                            background: isUp ? '#dcfce7' : '#f3f4f6',
+                            color: isUp ? '#15803d' : '#6b7280',
+                          }}>
+                            {iface.state}
+                          </span>
+                        </span>
+
+                        {/* Speed */}
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                          {iface.speed_mbps > 0
+                            ? iface.speed_mbps >= 1000
+                              ? `${iface.speed_mbps / 1000}G`
+                              : `${iface.speed_mbps}M`
+                            : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Also allow manual override */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>or type manually:</span>
+                  <input
+                    className="form-input"
+                    style={{ flex: 1, fontSize: 12 }}
+                    value={form.host_interface ?? ''}
+                    onChange={e => setForm(f => ({ ...f, host_interface: e.target.value }))}
+                    placeholder="ens3, bond0, eth0.100…"
+                  />
+                </div>
+              </>
             ) : (
+              /* No interfaces detected — plain text input */
               <input
                 className="form-input"
                 value={form.host_interface ?? ''}
                 onChange={e => setForm(f => ({ ...f, host_interface: e.target.value }))}
-                placeholder="eth0"
+                placeholder="e.g. eth0, ens3, bond0"
               />
             )}
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-              Physical NIC on the Linux host. Run <code>sudo bash infra/linux-macvlan-setup.sh</code> first to enable promiscuous mode.
+
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+              Physical NIC on the Linux host to use as macvlan/ipvlan parent.
+              Run <code>sudo bash infra/linux-macvlan-setup.sh</code> first to enable promiscuous mode.
+              <br />
+              <strong>Tip:</strong> pick an <em>UP</em> interface that carries the LAN traffic your NMS will use.
             </div>
           </div>
         )}

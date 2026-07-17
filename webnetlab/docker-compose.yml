@@ -60,6 +60,12 @@ services:
       - ./mibs:/app/mibs
       - ./seeds:/app/seeds
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mount host /proc/net read-only so list_host_interfaces() sees physical NICs.
+      # On macOS Docker Desktop this path is inside the HyperKit VM — list_host_interfaces()
+      # detects macOS via HOST_PLATFORM and returns [] without reading it.
+      - /proc/net:/host/proc/net:ro
+      # Mount host /sys/class/net for interface metadata (MAC, speed, operstate)
+      - /sys/class/net:/host/sys/class/net:ro
     depends_on:
       db:
         condition: service_healthy
