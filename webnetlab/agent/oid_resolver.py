@@ -5,10 +5,11 @@ Each entry stored in Redis under device:{id}:oids is a JSON string:
 
     {"mode": "static",  "value": "GigabitEthernet0/0", "type": "string"}
     {"mode": "static",  "value": "1",                  "type": "integer"}
+    {"mode": "static",  "value": "1.3.6.1.4.1.9.1.1", "type": "oid"}
     {"mode": "random",  "config": {"min":0,"max":4294967295,"type":"counter"}}
     {"mode": "scripted","script": "int(time.time())%100000", "type": "timeticks"}
 
-Supported types: string (default), integer, counter, gauge, timeticks, ipaddress
+Supported types: string (default), integer, counter, gauge, timeticks, ipaddress, oid
 """
 
 import json
@@ -19,7 +20,7 @@ import random
 def resolve_oid_value(raw_json: str) -> tuple:
     """
     Return (python_value, snmp_type_hint) where snmp_type_hint is one of:
-        "string", "integer", "counter", "gauge", "timeticks", "ipaddress"
+        "string", "integer", "counter", "gauge", "timeticks", "ipaddress", "oid"
 
     The caller uses the type hint to pick the correct ASN.1 class.
     """
@@ -60,4 +61,10 @@ def _coerce(value: str, vtype: str):
             return int(value)
         except (ValueError, TypeError):
             return 0
+    if vtype == "oid":
+        # Return as a tuple of ints for ObjectIdentifier encoding
+        try:
+            return tuple(int(x) for x in str(value).strip(".").split("."))
+        except (ValueError, TypeError):
+            return (0,)
     return str(value) if value is not None else ""

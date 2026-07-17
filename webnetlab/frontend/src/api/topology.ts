@@ -1,10 +1,8 @@
-import axios from 'axios';
 import type { TopologyData, TopologyLink } from '../types/topology';
-
-const BASE = 'http://localhost:8000';
+import { api } from './client';
 
 export const fetchTopology = (): Promise<TopologyData> =>
-  axios.get<TopologyData>(`${BASE}/api/topology`).then(r => r.data);
+  api.get<TopologyData>('/api/topology').then(r => r.data);
 
 export const createLink = (data: {
   src_device_id: number;
@@ -12,7 +10,7 @@ export const createLink = (data: {
   dst_device_id: number;
   dst_interface: string;
 }): Promise<TopologyLink> =>
-  axios.post<TopologyLink>(`${BASE}/api/topology/links`, data).then(r => r.data);
+  api.post<TopologyLink>('/api/topology/links', data).then(r => r.data);
 
 export const deleteLink = (id: number): Promise<void> =>
-  axios.delete(`${BASE}/api/topology/links/${id}`).then(() => undefined);
+  api.delete(`/api/topology/links/${id}`).then(() => undefined);

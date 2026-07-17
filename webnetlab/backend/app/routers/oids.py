@@ -361,9 +361,10 @@ async def seed_from_walk(
         if record is None:
             record = OIDValue(device_id=device_id, oid=entry.oid)
             db.add(record)
-        record.value_mode = "walk_seed"
+        record.value_mode  = "walk_seed"
         record.walk_seed_value = entry.value
-        record.updated_at = datetime.utcnow()
+        record.value_type  = entry.value_type   # ← preserve Counter32/Timeticks/etc.
+        record.updated_at  = datetime.utcnow()
 
     await db.commit()
     await push_device_oids(device_id, db)

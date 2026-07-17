@@ -14,6 +14,18 @@ OID resolution strategy
    b. If not in the table, attempted via the pysnmp MIB engine (best-effort).
    c. If that also fails, the entry is SKIPPED (not stored as a symbolic key
       which would crash the SNMP agent).
+
+Type mapping
+------------
+The snmpwalk TYPE tag (STRING, INTEGER, Counter32, Gauge32, Timeticks,
+IpAddress, OID, Hex-STRING, …) is captured and normalised to the
+WebNetLab value_type vocabulary:
+  STRING / Hex-STRING / OID  → "string"
+  INTEGER                    → "integer"
+  Counter32 / Counter64      → "counter"
+  Gauge32 / Gauge64          → "gauge"
+  Timeticks                  → "timeticks"  (value stripped to integer)
+  IpAddress                  → "ipaddress"
 """
 
 import re
@@ -21,8 +33,9 @@ from typing import NamedTuple
 
 
 class WalkEntry(NamedTuple):
-    oid: str    # dotted numeric, e.g. "1.3.6.1.2.1.2.2.1.2.1"
-    value: str  # raw string value with type prefix stripped
+    oid:        str   # dotted numeric, e.g. "1.3.6.1.2.1.2.2.1.2.1"
+    value:      str   # cleaned value string (Timeticks → just the integer)
+    value_type: str   # "string" | "integer" | "counter" | "gauge" | "timeticks" | "ipaddress"
 
 
 def is_numeric_oid(oid: str) -> bool:
@@ -314,15 +327,32 @@ _OID_TABLE_KEYS = set(_OID_TABLE.keys())
 # Regex for snmpwalk line format
 # ---------------------------------------------------------------------------
 
+# Captures the optional SNMP type tag (e.g. "STRING", "Counter32", "Timeticks")
 _LINE_RE = re.compile(
     r"^(?:"
     r"(?P<module>[A-Za-z0-9_-]+)::(?P<name>[A-Za-z0-9_-]+)(?P<inst>(?:\.\d+)*)"
     r"|\.(?P<rawoid>[\d.]+)"
     r")"
     r"\s*=\s*"
-    r"(?:[A-Za-z][A-Za-z0-9-]*\d*:\s*)?"   # optional "TYPE: " prefix
+    r"(?:(?P<typetag>[A-Za-z][A-Za-z0-9-]*\d*):\s*)?"   # optional "TYPE: " prefix — captured
     r"(?P<value>.+)$"
 )
+
+# Mapping from snmpwalk TYPE tag to WebNetLab value_type
+_TYPE_MAP: dict[str, str] = {
+    "STRING":      "string",
+    "OID":         "string",
+    "Hex-STRING":  "string",
+    "Network Address": "string",
+    "INTEGER":     "integer",
+    "Counter32":   "counter",
+    "Counter64":   "counter",
+    "Gauge32":     "gauge",
+    "Gauge64":     "gauge",
+    "Timeticks":   "timeticks",
+    "IpAddress":   "ipaddress",
+    "BITS":        "string",
+}
 
 # ---------------------------------------------------------------------------
 # pysnmp fallback (best-effort for MIBs not in the static table)
@@ -375,13 +405,39 @@ def _resolve_symbolic(module: str, name: str, inst: str) -> str | None:
 # Public API
 # ---------------------------------------------------------------------------
 
+# Timeticks raw value looks like: "(14533823) 1 day, 16:22:18.23"
+# We extract only the integer in parentheses.
+_TIMETICKS_RE = re.compile(r"^\((\d+)\)")
+
+
+def _normalize_value(raw: str, vtype: str) -> str:
+    """Clean up the raw value string based on its detected type.
+
+    - Timeticks: strip "(integer) human-readable" → just the integer string
+    - STRING:    strip surrounding quotes already done by caller
+    - others:    return as-is
+    """
+    if vtype == "timeticks":
+        m = _TIMETICKS_RE.match(raw.strip())
+        if m:
+            return m.group(1)
+        # If no parentheses, try to use just the first word if it's numeric
+        first = raw.strip().split()[0] if raw.strip() else "0"
+        return first if first.isdigit() else "0"
+    return raw
+
+
 def parse_snmpwalk(text: str) -> list[WalkEntry]:
-    """Parse snmpwalk text output and return a list of WalkEntry(oid, value).
+    """Parse snmpwalk text output and return a list of WalkEntry(oid, value, value_type).
 
     Blank lines and comment lines (starting with #) are silently skipped.
     Lines that do not match the expected format are silently skipped.
     Lines whose OID cannot be resolved to a dotted-numeric form are skipped
     (they must not be stored as symbolic strings — that crashes the agent).
+
+    The value_type is inferred from the snmpwalk TYPE tag (STRING, Counter32, etc.)
+    and normalised to the WebNetLab vocabulary.  Timeticks values are stripped to
+    their integer component so the agent can encode them correctly.
     """
     entries: list[WalkEntry] = []
     skipped_symbolic = 0
@@ -395,6 +451,13 @@ def parse_snmpwalk(text: str) -> list[WalkEntry]:
             continue
 
         raw_value = m.group("value").strip().strip('"')
+
+        # Determine value_type from the captured type tag
+        typetag  = (m.group("typetag") or "").strip()
+        vtype    = _TYPE_MAP.get(typetag, "string")
+
+        # Normalise the value (e.g. strip timeticks human text)
+        value = _normalize_value(raw_value, vtype)
 
         if m.group("rawoid") is not None:
             oid = m.group("rawoid")
@@ -412,7 +475,7 @@ def parse_snmpwalk(text: str) -> list[WalkEntry]:
             skipped_symbolic += 1
             continue
 
-        entries.append(WalkEntry(oid=oid, value=raw_value))
+        entries.append(WalkEntry(oid=oid, value=value, value_type=vtype))
 
     if skipped_symbolic:
         import logging

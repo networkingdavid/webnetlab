@@ -121,7 +121,7 @@ def _encode_value(raw_value, type_hint: str = "string"):
     Encode a Python value into the correct ASN.1 type using the type hint
     returned by resolve_oid_value.
 
-    type_hint values: string | integer | counter | gauge | timeticks | ipaddress
+    type_hint values: string | integer | counter | gauge | timeticks | ipaddress | oid
     """
     if type_hint == "counter":
         return Counter32(int(raw_value) if raw_value else 0)
@@ -134,6 +134,15 @@ def _encode_value(raw_value, type_hint: str = "string"):
     if type_hint == "ipaddress":
         try:
             return IpAddress(raw_value)
+        except Exception:
+            return OctetString(str(raw_value).encode())
+    if type_hint == "oid":
+        try:
+            if isinstance(raw_value, (tuple, list)):
+                return ObjectIdentifier(raw_value)
+            return ObjectIdentifier(
+                tuple(int(x) for x in str(raw_value).strip(".").split("."))
+            )
         except Exception:
             return OctetString(str(raw_value).encode())
     if isinstance(raw_value, (bytes, bytearray)):
